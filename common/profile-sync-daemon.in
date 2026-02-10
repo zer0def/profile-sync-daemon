@@ -523,6 +523,7 @@ do_sync_for() {
         else
           rsync -aX --delete-after --inplace --no-whole-file --exclude .flagged "$DIR/" "$BACKUP/"
         fi
+        [ "$?" -eq 0 ] || { echo -e "${RED}Error: Failed to resync $DIR to $BACK_OVFS${NRM}" >&2; exit 2; }
       else
         # initial sync
         REPORT="sync"
@@ -541,6 +542,14 @@ do_sync_for() {
         ln -s "$TMP" "$DIR"
         chown -h "$user":"$group" "$DIR"
         touch "$DIR/.flagged"
+        
+        # create $BACK_OVFS directory for storing resync data
+        if [[ ! -d "$BACK_OVFS" ]]; then
+          install -dm"$PREFIXP" --owner="$user" --group="$group" "$BACK_OVFS" || {
+            echo -e "${RED}Error: Failed to create $BACK_OVFS${NRM}" >&2
+            exit 2
+          }
+        fi
       fi
       echo -e "${BLD}$browser $REPORT successful${NRM}"
     else
@@ -620,15 +629,17 @@ do_unsync() {
       # check if user has browser profile
       if [[ -h "$DIR" ]]; then
         unlink "$DIR"
-        # this assumes that the backup is always updated so
-        # be sure to invoke a sync before an unsync
-        #
-        # restore original dirtree
-        [[ -d "$BACKUP" ]] && mv --no-target-directory "$BACKUP" "$DIR"
+        
+        ## zer0def: risks inconsistency with tmpfs?
+        # unmount overlayfs FIRST while BACKUP still exists at original location
+        # moving BACKUP before unmounting breaks the overlayfs mount (lowerdir path disappears)
         if [[ $OLFS -eq 1 ]] && mountpoint -q "$TMP"; then
           rsync -aX --delete-after --inplace --no-whole-file --exclude .flagged "$BACK_OVFS/" "$DIR/"
           sudo psd-overlay-helper -d "$TMP" -w "$WORK" mountdown && rm -rf "$TMP" "$UPPER"
         fi
+        
+        # restore BACKUP (which now has the changes merged in)
+        [[ -d "$BACKUP" ]] && mv --no-target-directory "$BACKUP" "$DIR"
         [[ -d "$TMP" ]] && rm -rf "$TMP"
         echo -e "${BLD}$browser unsync successful${NRM}"
       else
