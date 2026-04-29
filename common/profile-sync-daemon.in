@@ -587,6 +587,8 @@ do_sync() {
 enforce() {
   local browser
   for browser in "${BROWSERS[@]}"; do
+  load_env_for "$browser"
+  for DIR in "${DIRArr[@]}"; do
     local CRASHArr=()
     while IFS= read -d '' -r backup; do
       CRASHArr=("${CRASHArr[@]}" "$backup")
@@ -597,6 +599,7 @@ enforce() {
         rm -rf "$remove"
       done
     fi
+  done
   done
 }
 
